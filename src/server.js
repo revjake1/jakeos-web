@@ -95,12 +95,44 @@ app.post('/cowork', async (c) => {
 
 // --- Todo write ---------------------------------------------------------
 
+app.post('/todos', async (c) => {
+  const form = await c.req.parseBody();
+  const text = (form.text || '').toString().trim();
+  const ident = c.get('identity');
+  if (!text) {
+    return htmlFragment(
+      c,
+      `<p class="err">Empty todo.</p>` +
+        (await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() })),
+    );
+  }
+  const r = await sidecar.post('/todos', { text, source: 'dashboard' }, { accessToken: ident.accessToken });
+  if (!r.ok) {
+    return htmlFragment(
+      c,
+      `<p class="err">Couldn't add todo: ${escapeHtml(r.error || '')}</p>` +
+        (await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() })),
+    );
+  }
+  return htmlFragment(c, await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() }));
+});
+
 app.post('/todos/:id/complete', async (c) => {
   const id = c.req.param('id');
   const ident = c.get('identity');
   const r = await sidecar.patch(`/todos/${encodeURIComponent(id)}/complete`, { source: 'dashboard' }, { accessToken: ident.accessToken });
   if (!r.ok) {
     return htmlFragment(c, `<p class="err">Couldn't complete todo: ${escapeHtml(r.error || '')}</p>`);
+  }
+  return htmlFragment(c, await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() }));
+});
+
+app.post('/todos/:id/reopen', async (c) => {
+  const id = c.req.param('id');
+  const ident = c.get('identity');
+  const r = await sidecar.patch(`/todos/${encodeURIComponent(id)}/reopen`, { source: 'dashboard' }, { accessToken: ident.accessToken });
+  if (!r.ok) {
+    return htmlFragment(c, `<p class="err">Couldn't reopen todo: ${escapeHtml(r.error || '')}</p>`);
   }
   return htmlFragment(c, await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() }));
 });

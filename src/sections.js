@@ -22,30 +22,104 @@ function emptyOrError(value, stale, error, emptyText) {
 }
 
 // ---- Todos -------------------------------------------------------------
+//
+// Renders open todos plus today's completed todos so the uncheck path is
+// discoverable without leaving the dashboard. Per design.md (jakeos-todos-module)
+// decisions 1-2: two parallel GETs, completed list filtered to today's UTC day.
+
+function isCompletedToday(iso) {
+  if (!iso) return false;
+  const today = new Date().toISOString().slice(0, 10); // UTC YYYY-MM-DD
+  return iso.slice(0, 10) === today;
+}
 
 export async function renderTodos({ accessToken, offline }) {
-  const { value, stale, error } = await sidecar.getCached('/todos?status=open&limit=25', { accessToken });
-  const fallback = emptyOrError(value, stale, error, 'No open todos.');
-  if (fallback != null) return fallback;
+  const [openRes, doneRes] = await Promise.all([
+    sidecar.getCached('/todos?status=open&limit=25', { accessToken }),
+    sidecar.getCached('/todos?status=completed&limit=20', { accessToken }),
+  ]);
+
+  // If both endpoints failed and nothing is cached, surface the offline error.
+  if (openRes.value == null && doneRes.value == null) {
+    return toString(
+      html`<p class="err">Sidecar unreachable. ${openRes.error ? html`<span class="muted">${openRes.error}</span>` : ''}</p>
+        ${addForm(offline)}`,
+    );
+  }
+
+  const open = openRes.value || [];
+  const completedToday = (doneRes.value || []).filter((t) => isCompletedToday(t.completed_at));
+  const stale = openRes.stale || doneRes.stale;
+
   return toString(html`
     ${staleTag(stale)}
-    <ul class="list">
-      ${value.map(
-        (t) => html`
-          <li>
-            <span class="text ${t.completed_at ? 'completed' : ''}">${t.text}</span>
-            <button
-              class="linklike"
-              hx-post="/todos/${t.id}/complete"
-              hx-target="#card-todos .card-body"
-              hx-swap="innerHTML"
-              ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
-            >done</button>
-          </li>
-        `,
-      )}
-    </ul>
+    ${open.length === 0 && completedToday.length === 0
+      ? html`<p class="empty">No todos. Add one below.</p>`
+      : ''}
+    ${open.length > 0
+      ? html`<ul class="list">
+          ${open.map(
+            (t) => html`
+              <li>
+                <span class="text">${t.text}</span>
+                <button
+                  class="linklike"
+                  hx-post="/todos/${t.id}/complete"
+                  hx-target="#card-todos .card-body"
+                  hx-swap="innerHTML"
+                  ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
+                >done</button>
+              </li>
+            `,
+          )}
+        </ul>`
+      : ''}
+    ${completedToday.length > 0
+      ? html`
+          ${open.length > 0 ? raw('<hr class="todos-sep" />') : ''}
+          <ul class="list todos-completed">
+            ${completedToday.map(
+              (t) => html`
+                <li class="todo-completed">
+                  <span class="text">${t.text}</span>
+                  <button
+                    class="linklike"
+                    title="Reopen this todo"
+                    hx-post="/todos/${t.id}/reopen"
+                    hx-target="#card-todos .card-body"
+                    hx-swap="innerHTML"
+                    ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
+                  >↩︎ undo</button>
+                </li>
+              `,
+            )}
+          </ul>
+        `
+      : ''}
+    ${addForm(offline)}
   `);
+}
+
+function addForm(offline) {
+  return html`
+    <form
+      class="todo-add"
+      hx-post="/todos"
+      hx-target="#card-todos .card-body"
+      hx-swap="innerHTML"
+      hx-on::after-request="this.reset()"
+    >
+      <input
+        type="text"
+        name="text"
+        placeholder="Add a todo…"
+        autocomplete="off"
+        ${offline ? raw('disabled title="Offline — sidecar unreachable"') : ''}
+        required
+      />
+      <button type="submit" ${offline ? raw('disabled') : ''}>Add</button>
+    </form>
+  `;
 }
 
 // ---- Important emails --------------------------------------------------

@@ -122,6 +122,16 @@ const BASE_CSS = `
   ul.list .meta { color: var(--muted); font-size: 11px; }
   button.linklike { background: none; border: none; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
   button.linklike:disabled { color: var(--muted); cursor: not-allowed; }
+  hr.todos-sep { border: none; border-top: 1px dashed var(--border); margin: 8px 0; }
+  ul.todos-completed li.todo-completed .text { color: var(--muted); text-decoration: line-through; }
+  form.todo-add { display: flex; gap: 6px; margin-top: 10px; }
+  form.todo-add input[type=text] { flex: 1 1 auto; padding: 6px 8px; background: var(--bg);
+                                    color: var(--fg); border: 1px solid var(--border); border-radius: 4px; font: inherit; }
+  form.todo-add button { padding: 6px 10px; background: var(--bg); border: 1px solid var(--border);
+                         color: var(--fg); border-radius: 4px; cursor: pointer; font-size: 12px; }
+  form.todo-add button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  form.todo-add button:disabled,
+  form.todo-add input:disabled { opacity: 0.5; cursor: not-allowed; }
   .stale-tag { display: inline-block; padding: 1px 6px; border-radius: 999px;
                background: rgba(210, 138, 58, 0.18); color: var(--warn); font-size: 11px; margin-left: 6px; }
   .err { color: var(--bad); }

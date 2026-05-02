@@ -588,7 +588,7 @@ export function renderIngestIndicator(status, { offline = false, outcomeBanner =
     <div id="ingest-indicator" class="ingest-indicator ingest-indicator--${state}"
          hx-get="/ingest-indicator" hx-trigger="every 10s" hx-swap="outerHTML"
          ${titleAttr ? raw(`title="${escapeAttr(titleAttr)}"`) : ''}>
-      <details id="ingest-details">
+      <details id="ingest-details"${outcomeBanner ? raw(' open') : ''}>
         <summary class="ingest-summary">
           <span class="ingest-line">
             Ingest: <span class="ingest-time">${rel}</span>,

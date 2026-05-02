@@ -34,12 +34,13 @@ function isCompletedToday(iso) {
 }
 
 export async function renderTodos({ accessToken, offline }) {
-  const [openRes, doneRes] = await Promise.all([
+  const [openRes, doneRes, inboxRes] = await Promise.all([
     sidecar.getCached('/todos?status=open&limit=25', { accessToken }),
     sidecar.getCached('/todos?status=completed&limit=20', { accessToken }),
+    sidecar.getCached('/raw-inbox?state=open&limit=50', { accessToken }),
   ]);
 
-  // If both endpoints failed and nothing is cached, surface the offline error.
+  // If both todos endpoints failed and nothing is cached, surface the offline error.
   if (openRes.value == null && doneRes.value == null) {
     return toString(
       html`<p class="err">Sidecar unreachable. ${openRes.error ? html`<span class="muted">${openRes.error}</span>` : ''}</p>
@@ -49,10 +50,12 @@ export async function renderTodos({ accessToken, offline }) {
 
   const open = openRes.value || [];
   const completedToday = (doneRes.value || []).filter((t) => isCompletedToday(t.completed_at));
-  const stale = openRes.stale || doneRes.stale;
+  const inbox = Array.isArray(inboxRes.value) ? inboxRes.value : [];
+  const stale = openRes.stale || doneRes.stale || inboxRes.stale;
 
   return toString(html`
     ${staleTag(stale)}
+    ${inbox.length > 0 ? renderInboxRegion(inbox, offline) : ''}
     ${open.length === 0 && completedToday.length === 0
       ? html`<p class="empty">No todos. Add one below.</p>`
       : ''}
@@ -98,6 +101,59 @@ export async function renderTodos({ accessToken, offline }) {
       : ''}
     ${addForm(offline)}
   `);
+}
+
+function renderInboxRegion(items, offline) {
+  return html`
+    <section class="inbox-region">
+      <h3 class="inbox-h">Inbox <span class="inbox-count">(${items.length} from raw notes)</span></h3>
+      <ul class="list inbox-list">
+        ${items.map(
+          (i) => html`
+            <li class="inbox-row">
+              <div class="text">${i.text}</div>
+              <div class="inbox-meta">
+                <span class="inbox-file" title="${i.file_path}">${lastSegment(i.file_path)}</span>
+                <span class="inbox-sep"> · </span>
+                <span class="inbox-header">${i.nearest_header || '(no heading)'}</span>
+              </div>
+              <div class="inbox-actions">
+                <button
+                  class="linklike"
+                  hx-post="/raw-inbox/${i.id}/promote-todo"
+                  hx-target="#card-todos .card-body"
+                  hx-swap="innerHTML"
+                  ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
+                >Promote</button>
+                <button
+                  class="linklike"
+                  hx-post="/raw-inbox/${i.id}/promote-wiki"
+                  hx-target="#card-todos .card-body"
+                  hx-swap="innerHTML"
+                  ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
+                >Wiki</button>
+                <button
+                  class="linklike inbox-dismiss"
+                  hx-post="/raw-inbox/${i.id}/dismiss"
+                  hx-target="#card-todos .card-body"
+                  hx-swap="innerHTML"
+                  ${offline ? raw('disabled title="Offline — writes disabled"') : ''}
+                >Dismiss</button>
+              </div>
+            </li>
+          `,
+        )}
+      </ul>
+      <hr class="inbox-sep-rule" />
+      <h3 class="inbox-h inbox-active-h">Active</h3>
+    </section>
+  `;
+}
+
+function lastSegment(path) {
+  if (!path) return '';
+  const parts = path.split('/');
+  return parts[parts.length - 1] || path;
 }
 
 function addForm(offline) {

@@ -560,10 +560,10 @@ function renderIngestEventRow(ev) {
   </li>`;
 }
 
-// Renders the indicator + drawer as a single fragment. The <details> uses
-// hx-preserve so its open/closed state survives the 10s poll's outerHTML swap.
-// Drawer contents update only when the user closes + reopens, which is fine
-// for an audit-log surface.
+// Renders the indicator + drawer as a single fragment. The 10s poll swaps
+// outerHTML, so the summary count + drawer body always reflect the latest
+// /ingest/status response. Drawer open/closed state resets on each poll —
+// acceptable trade-off for keeping the visible count fresh.
 //
 // outcomeBanner: optional one-line message rendered at the top of the drawer
 // after a manual rescan ("0 new" / "N queued for ingest" / "error: …").
@@ -588,7 +588,7 @@ export function renderIngestIndicator(status, { offline = false, outcomeBanner =
     <div id="ingest-indicator" class="ingest-indicator ingest-indicator--${state}"
          hx-get="/ingest-indicator" hx-trigger="every 10s" hx-swap="outerHTML"
          ${titleAttr ? raw(`title="${escapeAttr(titleAttr)}"`) : ''}>
-      <details id="ingest-details" hx-preserve="true">
+      <details id="ingest-details">
         <summary class="ingest-summary">
           <span class="ingest-line">
             Ingest: <span class="ingest-time">${rel}</span>,

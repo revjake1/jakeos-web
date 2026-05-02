@@ -430,17 +430,43 @@ export async function renderCaptures({ offline }) {
   return toString(html`
     ${staleTag(stale)}
     <ul class="list">
-      ${value.map(
-        (c) => html`
-          <li>
-            <span class="text">${c.raw_path.split('/').slice(-1)[0]}</span>
-            <span class="meta">${c.original_kind} · ${c.created_at?.slice(0, 10)}</span>
-          </li>
-        `,
-      )}
+      ${value.map(renderCaptureRow)}
     </ul>
     <div class="rescan">${rescanButton(offline)}</div>
   `);
+}
+
+function renderCaptureRow(c) {
+  const filename = c.filename || c.raw_path.split('/').slice(-1)[0];
+  const kindLabel = c.mime_type || c.original_kind;
+  const metaParts = [kindLabel, humanSize(c.size_bytes), humanAge(c.created_at)].filter(Boolean);
+  const filenameNode = c.companion_path
+    ? html`<a class="capture-link" href="${companionHref(c.companion_path)}" target="_blank" rel="noopener">${filename}</a>`
+    : html`${filename}`;
+  return html`
+    <li>
+      <span class="text">${filenameNode}</span>
+      <span class="meta">${metaParts.join(' · ')}</span>
+    </li>
+  `;
+}
+
+function humanSize(n) {
+  if (n == null || !Number.isFinite(n) || n < 0) return null;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+// Companion paths come back as absolute filesystem paths inside the wiki. v1
+// renders them as plaintext-via-file:// — Obsidian/Finder open them. A future
+// change can map these to a wiki-served URL once jakeos-web learns to serve
+// the wiki tree directly.
+function companionHref(p) {
+  if (!p) return '#';
+  if (p.startsWith('http')) return p;
+  return `file://${p}`;
 }
 
 function rescanButton(offline) {

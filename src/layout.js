@@ -70,6 +70,10 @@ export function renderShell({ identity, sidecar }) {
         <button type="submit" ${offline ? raw('disabled') : ''}>Send</button>
       </form>
       <div id="cowork-result" class="cowork-result"></div>
+      <div id="ingest-indicator" class="ingest-indicator ingest-indicator--unknown"
+           hx-get="/ingest-indicator" hx-trigger="load, every 10s" hx-swap="outerHTML">
+        <span class="ingest-line muted">Ingest: loading…</span>
+      </div>
     </footer>
   </body>
 </html>`);
@@ -189,4 +193,38 @@ const BASE_CSS = `
   .inbox-actions .inbox-dismiss { color: var(--bad); opacity: 0.85; }
   hr.inbox-sep-rule { border: none; border-top: 1px dashed var(--border); margin: 10px 0 6px; }
   .inbox-active-h { margin-top: 4px; }
+  /* ingest indicator (footer chrome) — see dashboard/spec.md "Ingest status indicator" */
+  .ingest-indicator { font-size: 11px; color: var(--muted); padding: 4px 0; }
+  .ingest-indicator--ok .ingest-line { color: var(--muted); }
+  .ingest-indicator--warn .ingest-line { color: var(--warn); }
+  .ingest-indicator--err  .ingest-line { color: var(--bad); }
+  .ingest-indicator details > summary { cursor: pointer; list-style: none; display: flex;
+    gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ingest-indicator details > summary::-webkit-details-marker { display: none; }
+  .ingest-indicator details > summary::before { content: '▸'; font-size: 9px; color: var(--muted); }
+  .ingest-indicator details[open] > summary::before { content: '▾'; }
+  .ingest-line { white-space: nowrap; }
+  .ingest-pending { font-variant-numeric: tabular-nums; }
+  .ingest-rescan { background: var(--bg); border: 1px solid var(--border); color: var(--fg);
+    padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; }
+  .ingest-rescan:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .ingest-rescan:disabled { opacity: 0.5; cursor: not-allowed; }
+  .ingest-drawer { margin-top: 6px; max-height: 220px; overflow-y: auto;
+    border-top: 1px dashed var(--border); padding-top: 6px; }
+  .ingest-banner { margin: 0 0 6px; padding: 4px 8px; border-radius: 4px;
+    background: var(--bg); border: 1px solid var(--border); font-size: 11px; }
+  .ingest-banner--ok { color: var(--fg); }
+  .ingest-banner--err { color: var(--bad); border-color: var(--bad); }
+  ul.ingest-events { list-style: none; padding: 0; margin: 0; }
+  ul.ingest-events li.ingest-event { display: grid; grid-template-columns: 60px 90px 90px 1fr;
+    gap: 6px; padding: 3px 0; border-bottom: 1px dashed var(--border); align-items: baseline;
+    font-size: 11px; }
+  ul.ingest-events li.ingest-event:last-child { border-bottom: none; }
+  .ingest-ev-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ingest-ev-mech { color: var(--accent); }
+  .ingest-ev-outcome { color: var(--fg); }
+  .ingest-ev-files { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ingest-event--err .ingest-ev-outcome { color: var(--bad); }
+  .ingest-ev-err { grid-column: 1 / -1; color: var(--bad); font-size: 10px;
+    background: rgba(192, 68, 74, 0.08); padding: 3px 6px; border-radius: 3px; margin-top: 2px; }
 `;

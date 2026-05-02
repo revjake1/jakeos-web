@@ -155,34 +155,157 @@ export async function renderEmails({ accessToken }) {
 }
 
 // ---- Calendar ----------------------------------------------------------
+//
+// Two-region layout per dashboard/spec.md "Calendar surface — today and next
+// 7 days": a prominent "Today" region followed by a condensed "Next 7 days"
+// region grouped by day. Events come from the user's primary Google Calendar
+// via the sidecar (which carries the access token forwarded as
+// X-Google-Access-Token from oauth2-proxy through this app).
+
+const LOCAL_TZ = 'America/New_York';
+
+// "today" partition uses Jake's local timezone. The server is UTC, so format
+// with Intl in the local zone and compare YYYY-MM-DD strings.
+function localDay(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: LOCAL_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function eventDay(ev) {
+  // All-day events: Google returns event.start.date (YYYY-MM-DD).
+  if (ev.all_day) return ev.start.slice(0, 10);
+  // Timed: event.start is RFC3339; partition by its day in LOCAL_TZ.
+  const d = new Date(ev.start);
+  if (Number.isNaN(d.getTime())) return ev.start.slice(0, 10);
+  return localDay(d);
+}
+
+function formatTime(ev) {
+  if (ev.all_day) return null;
+  const d = new Date(ev.start);
+  if (Number.isNaN(d.getTime())) return ev.start;
+  // Render the event's wall-clock time in the timezone Google reported.
+  const tz = ev.time_zone || LOCAL_TZ;
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: tz,
+    }).format(d);
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: LOCAL_TZ,
+    }).format(d);
+  }
+}
+
+function formatDayHeading(yyyyMmDd) {
+  // Anchor at noon UTC to dodge DST edge cases when formatting day-only strings.
+  const d = new Date(`${yyyyMmDd}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return yyyyMmDd;
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
+}
+
+function renderEventToday(ev) {
+  const time = formatTime(ev);
+  return html`
+    <li class="cal-event">
+      ${ev.all_day
+        ? html`<span class="cal-allday">all day</span>`
+        : html`<span class="cal-time">${time}</span>`}
+      <span class="cal-title">${ev.summary}</span>
+      ${ev.location ? html`<span class="cal-loc">${ev.location}</span>` : ''}
+    </li>
+  `;
+}
+
+function renderEventCondensed(ev) {
+  const time = formatTime(ev);
+  return html`
+    <li class="cal-event-condensed">
+      ${ev.all_day
+        ? html`<span class="cal-allday">all day</span>`
+        : html`<span class="cal-time">${time}</span>`}
+      <span class="cal-title">${ev.summary}</span>
+    </li>
+  `;
+}
 
 export async function renderCalendar({ accessToken }) {
   const { value, stale, error } = await sidecar.getCached('/calendar/upcoming', { accessToken });
   if (value == null) {
-    return toString(html`<p class="err">Sidecar unreachable. ${error ? html`<span class="muted">${error}</span>` : ''}</p>`);
+    return toString(
+      html`<p class="err">Sidecar unreachable. ${error ? html`<span class="muted">${error}</span>` : ''}</p>`,
+    );
   }
   const items = Array.isArray(value.items) ? value.items : [];
+
+  // Empty list — including the OAuth-not-wired case — renders the friendly
+  // empty state with the same hint behavior the stub had.
   if (items.length === 0) {
     return toString(html`
-      <p class="empty">No upcoming events.</p>
+      ${staleTag(stale)}
+      <p class="empty">No events in the next 7 days.</p>
       ${value.oauth_wired === false
         ? html`<p class="muted">Google Calendar OAuth not wired in sidecar yet.</p>`
         : ''}
-      ${staleTag(stale)}
     `);
   }
+
+  // Partition into today and upcoming, grouped by event-day.
+  const todayKey = localDay(new Date());
+  const today = [];
+  const upcomingByDay = new Map(); // YYYY-MM-DD -> events[]
+
+  for (const ev of items) {
+    const day = eventDay(ev);
+    if (day === todayKey) {
+      today.push(ev);
+    } else if (day > todayKey) {
+      const list = upcomingByDay.get(day) || [];
+      list.push(ev);
+      upcomingByDay.set(day, list);
+    }
+    // day < todayKey shouldn't happen given timeMin=now on the sidecar; ignore.
+  }
+
+  const upcomingDays = [...upcomingByDay.keys()].sort();
+  const hasUpcoming = upcomingDays.length > 0;
+
   return toString(html`
     ${staleTag(stale)}
-    <ul class="list">
-      ${items.map(
-        (e) => html`
-          <li>
-            <span class="text">${e.summary}</span>
-            <span class="meta">${e.start}</span>
-          </li>
-        `,
-      )}
-    </ul>
+    <section class="cal-today">
+      <h3>Today</h3>
+      ${today.length === 0
+        ? html`<p class="empty">Nothing today.</p>`
+        : html`<ul class="cal-list cal-list-today">
+            ${today.map(renderEventToday)}
+          </ul>`}
+    </section>
+    ${hasUpcoming
+      ? html`<section class="cal-upcoming">
+          <h3>Next 7 days</h3>
+          ${upcomingDays.map(
+            (day) => html`
+              <h4 class="cal-day">${formatDayHeading(day)}</h4>
+              <ul class="cal-list cal-list-upcoming">
+                ${upcomingByDay.get(day).map(renderEventCondensed)}
+              </ul>
+            `,
+          )}
+        </section>`
+      : ''}
   `);
 }
 

@@ -152,4 +152,26 @@ const BASE_CSS = `
   .rescan { display: inline-block; margin-top: 6px; }
   pre.diff { background: var(--bg); border: 1px solid var(--border); border-radius: 4px;
              padding: 6px; max-height: 120px; overflow: auto; font-size: 11px; margin: 4px 0; }
+  .cal-today h3, .cal-upcoming h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600;
+                                    text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .cal-today { margin-bottom: 14px; }
+  .cal-upcoming { border-top: 1px dashed var(--border); padding-top: 10px; }
+  ul.cal-list { list-style: none; padding: 0; margin: 0; }
+  ul.cal-list-today li.cal-event { padding: 6px 0; border-bottom: 1px dashed var(--border);
+                                    display: grid; grid-template-columns: 64px 1fr; gap: 8px;
+                                    align-items: baseline; font-size: 14px; }
+  ul.cal-list-today li.cal-event:last-child { border-bottom: none; }
+  ul.cal-list-today .cal-time, ul.cal-list-today .cal-allday { color: var(--accent); font-variant-numeric: tabular-nums; }
+  ul.cal-list-today .cal-title { color: var(--fg); font-weight: 500; }
+  ul.cal-list-today .cal-loc { grid-column: 2; color: var(--muted); font-size: 12px; }
+  h4.cal-day { margin: 8px 0 4px; font-size: 11px; font-weight: 500; color: var(--muted);
+               text-transform: uppercase; letter-spacing: 0.04em; }
+  ul.cal-list-upcoming li.cal-event-condensed { padding: 3px 0; display: grid;
+                                                 grid-template-columns: 56px 1fr; gap: 8px;
+                                                 align-items: baseline; font-size: 12px; color: var(--muted); }
+  ul.cal-list-upcoming .cal-time, ul.cal-list-upcoming .cal-allday {
+    color: var(--muted); font-variant-numeric: tabular-nums;
+  }
+  ul.cal-list-upcoming .cal-title { color: var(--fg); }
+  .cal-allday { font-style: italic; }
 `;

@@ -174,4 +174,19 @@ const BASE_CSS = `
   }
   ul.cal-list-upcoming .cal-title { color: var(--fg); }
   .cal-allday { font-style: italic; }
+  .inbox-region { margin-bottom: 6px; }
+  .inbox-h { margin: 0 0 6px; font-size: 12px; font-weight: 600; text-transform: uppercase;
+             letter-spacing: 0.06em; color: var(--muted); }
+  .inbox-h .inbox-count { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; font-size: 11px; }
+  ul.inbox-list { list-style: none; padding: 0; margin: 0; }
+  ul.inbox-list li.inbox-row { display: block; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+  ul.inbox-list li.inbox-row:last-child { border-bottom: none; }
+  ul.inbox-list li.inbox-row .text { color: var(--fg); margin-bottom: 2px; }
+  .inbox-meta { color: var(--muted); font-size: 11px; }
+  .inbox-file { color: var(--accent); }
+  .inbox-actions { margin-top: 4px; display: flex; gap: 10px; }
+  .inbox-actions button { padding: 0; font-size: 12px; }
+  .inbox-actions .inbox-dismiss { color: var(--bad); opacity: 0.85; }
+  hr.inbox-sep-rule { border: none; border-top: 1px dashed var(--border); margin: 10px 0 6px; }
+  .inbox-active-h { margin-top: 4px; }
 `;

@@ -137,6 +137,28 @@ app.post('/todos/:id/reopen', async (c) => {
   return htmlFragment(c, await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() }));
 });
 
+// --- Raw inbox (process verbs) ----------------------------------------
+
+for (const verb of ['promote-todo', 'promote-wiki', 'dismiss']) {
+  app.post(`/raw-inbox/:id/${verb}`, async (c) => {
+    const id = c.req.param('id');
+    const ident = c.get('identity');
+    const r = await sidecar.post(
+      `/raw-inbox/${encodeURIComponent(id)}/${verb}`,
+      {},
+      { accessToken: ident.accessToken },
+    );
+    if (!r.ok) {
+      return htmlFragment(
+        c,
+        `<p class="err">Couldn't ${escapeHtml(verb)}: ${escapeHtml(r.error || '')}</p>` +
+          (await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() })),
+      );
+    }
+    return htmlFragment(c, await renderTodos({ accessToken: ident.accessToken, offline: await offlineFlag() }));
+  });
+}
+
 // --- Self-loop review ---------------------------------------------------
 
 app.post('/self-loop/:id/review', async (c) => {

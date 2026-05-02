@@ -512,3 +512,112 @@ function humanAge(iso) {
   if (s < 172800) return `${Math.round(s / 3600)}h old`;
   return `${Math.round(s / 86400)}d old`;
 }
+
+// ---- Ingest indicator -------------------------------------------------
+//
+// Footer-chrome surface for the sidecar's ingest pipeline state. Single line
+// when collapsed; click to expand a drawer with the last 10 trigger events
+// from /ingest/status. Per dashboard/spec.md "Ingest status indicator" and
+// ingest/spec.md "Surface visibility".
+
+function relativeTimeFromIso(iso) {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  if (s < 86400 * 7) return `${Math.round(s / 86400)}d ago`;
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+// Returns 'ok' | 'warn' | 'err' per dashboard/spec.md "Ingest status indicator"
+// coloring rules. Pure timestamp logic; no extra state.
+function ingestState({ last_successful_at, last_error_at }) {
+  const errT = last_error_at ? Date.parse(last_error_at) : null;
+  const okT = last_successful_at ? Date.parse(last_successful_at) : null;
+  const errIsLatest = errT && (!okT || errT > okT);
+  if (!errIsLatest) return 'ok';
+  const ageMs = Date.now() - errT;
+  return ageMs < 24 * 3600 * 1000 ? 'warn' : 'err';
+}
+
+function renderIngestEventRow(ev) {
+  const at = relativeTimeFromIso(ev.at) || ev.at;
+  const fileLabel =
+    Array.isArray(ev.trigger_files) && ev.trigger_files.length > 0
+      ? ev.trigger_files
+          .map((p) => p.split('/').pop())
+          .join(', ')
+      : '';
+  return html`<li class="ingest-event ingest-event--${ev.outcome === 'error' ? 'err' : 'ok'}">
+    <span class="ingest-ev-time" title="${ev.at}">${at}</span>
+    <span class="ingest-ev-mech">${ev.mechanism}</span>
+    <span class="ingest-ev-outcome">${ev.outcome}</span>
+    ${fileLabel ? html`<span class="ingest-ev-files" title="${ev.trigger_files.join('\n')}">${fileLabel}</span>` : ''}
+    ${ev.error_message ? html`<span class="ingest-ev-err">${ev.error_message}</span>` : ''}
+  </li>`;
+}
+
+// Renders the indicator + drawer as a single fragment. The 10s poll swaps
+// outerHTML, so the summary count + drawer body always reflect the latest
+// /ingest/status response. Drawer open/closed state resets on each poll —
+// acceptable trade-off for keeping the visible count fresh.
+//
+// outcomeBanner: optional one-line message rendered at the top of the drawer
+// after a manual rescan ("0 new" / "N queued for ingest" / "error: …").
+export function renderIngestIndicator(status, { offline = false, outcomeBanner = null } = {}) {
+  if (status == null) {
+    return toString(html`
+      <div id="ingest-indicator" class="ingest-indicator ingest-indicator--unknown"
+           hx-get="/ingest-indicator" hx-trigger="every 10s" hx-swap="outerHTML">
+        <span class="ingest-line">Ingest: unknown</span>
+      </div>`);
+  }
+
+  const state = ingestState(status);
+  const rel = status.last_successful_at
+    ? relativeTimeFromIso(status.last_successful_at)
+    : 'never run';
+  const pendingLabel = `${status.pending_count} pending`;
+  const errMsg = status.last_error_message || '';
+  const titleAttr = state !== 'ok' && errMsg ? errMsg : '';
+
+  return toString(html`
+    <div id="ingest-indicator" class="ingest-indicator ingest-indicator--${state}"
+         hx-get="/ingest-indicator" hx-trigger="every 10s" hx-swap="outerHTML"
+         ${titleAttr ? raw(`title="${escapeAttr(titleAttr)}"`) : ''}>
+      <details id="ingest-details"${outcomeBanner ? raw(' open') : ''}>
+        <summary class="ingest-summary">
+          <span class="ingest-line">
+            Ingest: <span class="ingest-time">${rel}</span>,
+            <span class="ingest-pending">${pendingLabel}</span>
+          </span>
+          <button class="ingest-rescan"
+                  hx-post="/ingest/rescan"
+                  hx-target="#ingest-indicator"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="this"
+                  ${offline ? raw('disabled title="Offline — sidecar unreachable"') : ''}>
+            Re-scan
+          </button>
+        </summary>
+        <div class="ingest-drawer">
+          ${outcomeBanner
+            ? html`<p class="ingest-banner ingest-banner--${outcomeBanner.kind || 'info'}">${outcomeBanner.text}</p>`
+            : ''}
+          ${status.recent_events && status.recent_events.length > 0
+            ? html`<ul class="ingest-events">
+                ${status.recent_events.map(renderIngestEventRow)}
+              </ul>`
+            : html`<p class="empty">No ingest events recorded yet.</p>`}
+        </div>
+      </details>
+    </div>
+  `);
+}
+
+function escapeAttr(s) {
+  return String(s ?? '').replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;');
+}

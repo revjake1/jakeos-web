@@ -12,6 +12,7 @@ import {
   renderBriefings,
   renderCaptures,
   renderSelfLoop,
+  renderIngestIndicator,
 } from './sections.js';
 
 const app = new Hono();
@@ -175,14 +176,33 @@ app.post('/self-loop/:id/review', async (c) => {
   return htmlFragment(c, await renderSelfLoop({ offline: await offlineFlag() }));
 });
 
-// --- Manual ingest rescan ----------------------------------------------
+// --- Ingest indicator (footer chrome) + manual rescan ------------------
+
+app.get('/ingest-indicator', async (c) => {
+  const offline = await offlineFlag();
+  const res = await sidecar.getCached('/ingest/status');
+  return htmlFragment(c, renderIngestIndicator(res.value, { offline }));
+});
 
 app.post('/ingest/rescan', async (c) => {
   const r = await sidecar.post('/ingest/rescan', {});
+  let outcomeBanner;
   if (!r.ok) {
-    return htmlFragment(c, `<p class="err">Rescan failed: ${escapeHtml(r.error || '')}</p>`);
+    outcomeBanner = { kind: 'err', text: `error: ${r.error || 'unknown'}` };
+  } else {
+    const v = r.value || {};
+    const changedCount = Array.isArray(v.changed) ? v.changed.length : 0;
+    if (v.outcome === 'error') {
+      outcomeBanner = { kind: 'err', text: `error: ${v.error || 'rescan failed'}` };
+    } else if (changedCount === 0) {
+      outcomeBanner = { kind: 'ok', text: '0 new' };
+    } else {
+      outcomeBanner = { kind: 'ok', text: `${changedCount} queued for ingest` };
+    }
   }
-  return htmlFragment(c, await renderCaptures({ offline: false }));
+  const offline = await offlineFlag();
+  const res = await sidecar.getCached('/ingest/status');
+  return htmlFragment(c, renderIngestIndicator(res.value, { offline, outcomeBanner }));
 });
 
 // --- helpers -----------------------------------------------------------

@@ -181,33 +181,44 @@ function addForm(offline) {
 // ---- Important emails --------------------------------------------------
 
 export async function renderEmails({ accessToken }) {
-  const { value, stale, error } = await sidecar.getCached('/emails/important?limit=10', { accessToken });
+  // v0: show most-recent unread inbox messages (no classifier yet).
+  // The "important" classifier is Phase 4.2 future work; until then we just
+  // surface what's actually unread so the section is useful, not empty.
+  const { value, stale, error } = await sidecar.getCached('/emails/recent?limit=10', { accessToken });
   if (value == null) {
     return toString(html`<p class="err">Sidecar unreachable. ${error ? html`<span class="muted">${error}</span>` : ''}</p>`);
   }
   const items = Array.isArray(value.items) ? value.items : [];
   if (items.length === 0) {
     return toString(html`
-      <p class="empty">No important email yet.</p>
-      ${value.gmail_fetch_wired === false
-        ? html`<p class="muted">Gmail fetch not yet wired in sidecar; flagged messages will appear here once wired.</p>`
-        : ''}
+      <p class="empty">${value.oauth_wired === false ? 'Gmail OAuth not wired.' : 'Inbox zero — no unread mail.'}</p>
       ${staleTag(stale)}
     `);
   }
   return toString(html`
     ${staleTag(stale)}
     <ul class="list">
-      ${items.map(
-        (e) => html`
-          <li>
-            <span class="text">${e.message_id}</span>
-            <span class="meta">${e.flagged_at?.slice(0, 10) || ''}</span>
-          </li>
-        `,
-      )}
+      ${items.map(emailRow)}
     </ul>
   `);
+}
+
+function emailRow(e) {
+  // From: "Alice Doe <alice@example.com>" → display "Alice Doe" if a friendly
+  // name is present, otherwise the address.
+  const m = (e.from || '').match(/^(.*?)\s*<.+>\s*$/);
+  const fromShort = m ? m[1].replace(/^"|"$/g, '') : (e.from || '');
+  const dateShort = e.date ? new Date(e.date).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+  }) : '';
+  return html`
+    <li>
+      <span class="text">
+        <strong>${fromShort}</strong>: ${e.subject}
+      </span>
+      <span class="meta">${dateShort}${e.snippet ? html` — ${e.snippet.slice(0, 90)}…` : ''}</span>
+    </li>
+  `;
 }
 
 // ---- Calendar ----------------------------------------------------------
@@ -379,19 +390,64 @@ export async function renderEmployment() {
       ${staleTag(stale)}
     `);
   }
-  // Tracker is markdown. Show a condensed summary: count of lines containing
-  // "outstanding" / "needs followup" / "rejected" markers. Hide rejected per
-  // spec ("rejected hidden").
-  const md = value.raw_markdown || '';
-  const lines = md.split('\n');
-  const outstanding = lines.filter((l) => /^[-*]\s/.test(l) && !/rejected/i.test(l)).slice(0, 8);
+  // Tracker is a pipe-table per the canonical layout in the wiki:
+  //   | # | Date | Company | Role | ATS | Fit | Status |
+  // Parse rows, hide rejected/closed/expired per the spec ("rejected hidden"),
+  // surface action-required items first, then outstanding.
+  const rows = parseEmploymentTable(value.raw_markdown || '');
+  const visible = rows.filter((r) => !isHidden(r));
+  const actionRequired = visible.filter((r) => /action required|needs followup|⚡/i.test(r.status));
+  const outstanding = visible.filter((r) => !actionRequired.includes(r)).slice(0, 8);
   return toString(html`
     ${staleTag(stale)}
     ${value.last_modified ? html`<p class="muted">Tracker updated ${value.last_modified.slice(0, 16).replace('T', ' ')}</p>` : ''}
+    ${actionRequired.length > 0
+      ? html`<p class="muted" style="color: var(--warn); margin: 0 0 4px;">⚡ Needs follow-up</p>
+        <ul class="list">
+          ${actionRequired.map(employmentRow)}
+        </ul>
+        <hr class="todos-sep" />`
+      : ''}
     ${outstanding.length === 0
       ? html`<p class="empty">No outstanding applications.</p>`
-      : html`<ul class="list">${outstanding.map((l) => html`<li><span class="text">${l.replace(/^[-*]\s+/, '')}</span></li>`)}</ul>`}
+      : html`<ul class="list">${outstanding.map(employmentRow)}</ul>`}
   `);
+}
+
+function parseEmploymentTable(md) {
+  // Split on the table's data rows (lines starting and ending with `|`).
+  // Skip the header row (column names) and the separator row (---|---|...).
+  const rows = [];
+  for (const line of md.split('\n')) {
+    if (!line.startsWith('|') || !line.trim().endsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+    if (cells.length < 7) continue;
+    if (cells[0].toLowerCase() === '#' || /^-+$/.test(cells[0])) continue; // header / separator
+    const [num, date, company, role, ats, fit, status] = cells;
+    rows.push({ num, date, company, role, ats, fit, status });
+  }
+  return rows;
+}
+
+function isHidden(row) {
+  // Per dashboard/spec.md: rejected hidden. Also hide closed/expired.
+  return /rejected|closed|expired|withdrawn/i.test(row.status);
+}
+
+function employmentRow(r) {
+  const fitTag = r.fit && r.fit !== '—'
+    ? html`<span class="meta" style="margin-left: 6px;">${r.fit}</span>`
+    : '';
+  const statusShort = (r.status || '').split('—')[0].trim().slice(0, 60);
+  return html`
+    <li>
+      <span class="text">
+        <strong>${r.company}</strong> · ${r.role}
+        ${fitTag}
+      </span>
+      <span class="meta" title="${r.status}">${r.date} · ${r.ats} · ${statusShort}</span>
+    </li>
+  `;
 }
 
 // ---- Briefings ---------------------------------------------------------
